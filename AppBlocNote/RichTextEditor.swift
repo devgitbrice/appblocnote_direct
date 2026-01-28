@@ -19,8 +19,8 @@ struct RichTextEditor: UIViewRepresentable {
         textView.font = UIFont.systemFont(ofSize: CGFloat(fontSize))
         textView.textColor = UIColor.label
 
-        // IMPORTANT: Utiliser AutoLayout au lieu de autoresizingMask
-        textView.translatesAutoresizingMaskIntoConstraints = false
+        // CORRECTION: On laisse autoresizingMask (true par défaut) gérer le layout SwiftUI
+        // On ne force pas le translatesAutoresizingMaskIntoConstraints à false
 
         // Configuration du textContainer
         textView.textContainer.lineBreakMode = .byWordWrapping
@@ -43,15 +43,8 @@ struct RichTextEditor: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {
-        // Configurer les contraintes si pas encore fait
-        if uiView.constraints.isEmpty, let superview = uiView.superview {
-            NSLayoutConstraint.activate([
-                uiView.leadingAnchor.constraint(equalTo: superview.leadingAnchor),
-                uiView.trailingAnchor.constraint(equalTo: superview.trailingAnchor),
-                uiView.topAnchor.constraint(equalTo: superview.topAnchor),
-                uiView.bottomAnchor.constraint(equalTo: superview.bottomAnchor)
-            ])
-        }
+        // CORRECTION: Suppression de la gestion manuelle des contraintes ici.
+        // SwiftUI s'en charge.
 
         // Mise à jour du texte (Uniquement si changé pour éviter les boucles)
         if context.coordinator.lastText != text {
@@ -67,8 +60,9 @@ struct RichTextEditor: UIViewRepresentable {
 
         // Recalcul hauteur
         DispatchQueue.main.async {
-            let size = uiView.sizeThatFits(CGSize(width: uiView.bounds.width > 0 ? uiView.bounds.width : UIScreen.main.bounds.width, height: .infinity))
-            let newHeight = size.height + 20
+            let width = uiView.bounds.width > 0 ? uiView.bounds.width : UIScreen.main.bounds.width
+            let size = uiView.sizeThatFits(CGSize(width: width, height: .infinity))
+            let newHeight = size.height + 20 // Marge de sécurité
             if abs(self.dynamicHeight - newHeight) > 2 {
                 self.dynamicHeight = newHeight
             }
