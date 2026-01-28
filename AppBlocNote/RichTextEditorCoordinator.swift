@@ -95,13 +95,21 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
     
-    func recalculateHeight(view: UITextView, dynamicHeight: Binding<CGFloat>) {
+    func recalculateHeight(view: UITextView, dynamicHeight: Binding<CGFloat>, availableWidth: CGFloat = 0) {
         DispatchQueue.main.async {
-            // CORRECTION: On s'assure que la largeur n'est pas 0
-            let width = view.frame.width > 0 ? view.frame.width : UIScreen.main.bounds.width
+            // 🔧 FIX: Utiliser la largeur disponible fournie par GeometryReader
+            let width: CGFloat
+            if availableWidth > 0 {
+                width = availableWidth
+            } else if view.frame.width > 0 {
+                width = view.frame.width
+            } else {
+                width = UIScreen.main.bounds.width
+            }
+
             let size = view.sizeThatFits(CGSize(width: width, height: .infinity))
             let height = size.height + 20
-            
+
             if abs(dynamicHeight.wrappedValue - height) > 2 {
                 dynamicHeight.wrappedValue = height
             }
