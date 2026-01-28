@@ -14,8 +14,8 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
     // --- 1. RECEPTION ET ANALYSE ---
     func updateTextContent(textView: UITextView, html: String, fontSize: Double) {
         
-        // PROTECTION ANTI-BOUCLE
-        if html == lastText { return }
+        // ✅ FIX : Protection anti-boucle modifiée - permet l'init des blocs vides
+        if html == lastText && !html.isEmpty { return }
         
         print("\n⬇️ [UPDATE] HTML Reçu (len: \(html.count))")
 
@@ -38,6 +38,16 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
         }
         
         cleanContent = cleanContent.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // ✅ FIX : Si contenu vide, initialiser typingAttributes et sortir
+        if cleanContent.isEmpty {
+            textView.text = ""
+            textView.typingAttributes = [
+                .font: UIFont.systemFont(ofSize: CGFloat(fontSize)),
+                .foregroundColor: UIColor.label
+            ]
+            return
+        }
 
         // 2. CSS CORRECTIF (AVEC INLINE-BLOCK)
         let cssStyle = """
@@ -65,8 +75,8 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
                 margin-right: 4px; 
             }
             
-            ul, ol, li, div, br { display: block !important; }
-            ul, ol { margin-top: 10px; margin-bottom: 10px; padding-left: 20px; }
+            /* ✅ FIX : Retrait de div et br du display: block */
+            ul, ol { display: block !important; margin-top: 10px; margin-bottom: 10px; padding-left: 20px; }
             li { display: list-item !important; margin-bottom: 4px; }
         </style>
         """
@@ -86,6 +96,12 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
                 mutable.addAttribute(.font, value: UIFont.systemFont(ofSize: CGFloat(fontSize)), range: range)
                 
                 textView.attributedText = mutable
+                
+                // ✅ FIX : Réappliquer typingAttributes après avoir mis le contenu
+                textView.typingAttributes = [
+                    .font: UIFont.systemFont(ofSize: CGFloat(fontSize)),
+                    .foregroundColor: UIColor.label
+                ]
             } else {
                 textView.text = cleanContent
             }
@@ -98,6 +114,12 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
         let range = NSRange(location: 0, length: mutable.length)
         mutable.addAttribute(.font, value: UIFont.systemFont(ofSize: CGFloat(fontSize)), range: range)
         textView.attributedText = mutable
+        
+        // ✅ FIX : Mettre à jour typingAttributes aussi
+        textView.typingAttributes = [
+            .font: UIFont.systemFont(ofSize: CGFloat(fontSize)),
+            .foregroundColor: UIColor.label
+        ]
     }
 
     // --- 3. INTERCEPTION CLAVIER (LOGS) ---
@@ -167,3 +189,4 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
     @objc func toggleNumberList() { currentTextView?.insertText("\n1. ") }
     @objc func dismissKeyboard() { currentTextView?.resignFirstResponder() }
 }
+

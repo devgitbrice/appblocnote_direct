@@ -28,6 +28,12 @@ struct RichTextEditor: UIViewRepresentable {
         textView.font = UIFont.systemFont(ofSize: CGFloat(fontSize))
         textView.textColor = UIColor.label
         textView.dataDetectorTypes = []
+        
+        // ✅ FIX : Définir typingAttributes pour le nouveau texte tapé
+        textView.typingAttributes = [
+            .font: UIFont.systemFont(ofSize: CGFloat(fontSize)),
+            .foregroundColor: UIColor.label
+        ]
 
         // Toolbar
         let toolBar = UIToolbar(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44))
@@ -49,6 +55,13 @@ struct RichTextEditor: UIViewRepresentable {
         }
         if context.coordinator.lastFontSize != fontSize {
             context.coordinator.updateFontSize(textView: uiView, fontSize: fontSize)
+            
+            // ✅ FIX : Mettre à jour typingAttributes quand la taille change
+            uiView.typingAttributes = [
+                .font: UIFont.systemFont(ofSize: CGFloat(fontSize)),
+                .foregroundColor: UIColor.label
+            ]
+            
             context.coordinator.lastFontSize = fontSize
         }
 
@@ -89,3 +102,4 @@ class ForceLayoutTextView: UITextView {
         }
     }
 }
+
