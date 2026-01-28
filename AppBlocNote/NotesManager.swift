@@ -7,7 +7,7 @@ import UIKit
 // --- STRUCTURES DE DONNÉES ---
 
 struct NoteInsertPayload: Encodable {
-    let id: UUID        // ✅ Correction ID présente
+    let id: UUID
     let content: String
     let order_index: Int
     let category_id: UUID
@@ -57,8 +57,7 @@ class NotesManager: ObservableObject {
     @Published var afficherFavorisSeulement = false
     @Published var isAutoCorrectActive = true
     
-    // --- NOUVEAU : NAVIGATION TAGS ---
-    @Published var selectedTagToOpen: String? = nil // Déclenche l'ouverture de la page Tag
+    @Published var selectedTagToOpen: String? = nil
     
     var isRecording: Bool { dictationService.isRecording }
     var isTranscribing: Bool { dictationService.isTranscribing }
@@ -78,7 +77,7 @@ class NotesManager: ObservableObject {
     }
     
     // ==========================================
-    // GESTION DICTÉE
+    // GESTION DICTÉE (CORRIGÉE)
     // ==========================================
     
     func startRecording() {
@@ -90,8 +89,18 @@ class NotesManager: ObservableObject {
             guard let self = self, let text = text, let index = self.blocks.firstIndex(where: { $0.id == noteId }) else { return }
             
             let oldContent = self.blocks[index].content
-            let separateur = oldContent.isEmpty ? "" : " "
-            let newContent = oldContent + separateur + text
+            var newContent = ""
+            
+            // CORRECTION IMPORTANTE : Insertion propre dans le HTML
+            if let bodyEndRange = oldContent.range(of: "</body>", options: .backwards) {
+                // Si c'est du HTML, on insère avant la fermeture du body
+                let textToInsert = " " + text
+                newContent = oldContent.replacingCharacters(in: bodyEndRange, with: textToInsert + "</body>")
+            } else {
+                // Sinon (texte brut), on ajoute à la fin
+                let separateur = oldContent.isEmpty ? "" : " "
+                newContent = oldContent + separateur + text
+            }
             
             self.blocks[index].content = newContent
             
@@ -105,13 +114,11 @@ class NotesManager: ObservableObject {
     }
     
     // ==========================================
-    // GESTION DES TAGS (RECHERCHE)
+    // GESTION DES TAGS
     // ==========================================
     
     func fetchBlocksWithTag(tag: String) async -> [NoteBlock] {
         do {
-            // Recherche insensible à la casse (%tag%) dans Supabase
-            // Cela trouvera "content" qui contient le mot clé
             let results: [NoteBlock] = try await client
                 .from("site_notes_blocks")
                 .select()
@@ -127,7 +134,6 @@ class NotesManager: ObservableObject {
     }
     
     func openTag(_ tag: String) {
-        // On s'assure qu'il y a le # pour l'affichage du titre
         let formattedTag = tag.starts(with: "#") ? tag : "#\(tag)"
         self.selectedTagToOpen = formattedTag
     }
