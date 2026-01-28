@@ -87,10 +87,10 @@ class NotesManager: ObservableObject {
     func stopRecordingAndTranscribe(for noteId: UUID) {
         dictationService.stopAndTranscribe { [weak self] text in
             guard let self = self, let text = text, let index = self.blocks.firstIndex(where: { $0.id == noteId }) else { return }
-            
+
             let oldContent = self.blocks[index].content
             var newContent = ""
-            
+
             // CORRECTION IMPORTANTE : Insertion propre dans le HTML
             if let bodyEndRange = oldContent.range(of: "</body>", options: .backwards) {
                 // Si c'est du HTML, on insère avant la fermeture du body
@@ -101,15 +101,15 @@ class NotesManager: ObservableObject {
                 let separateur = oldContent.isEmpty ? "" : " "
                 newContent = oldContent + separateur + text
             }
-            
+
+            // FIX: On met à jour le contenu UNE SEULE FOIS
+            // Le onChange dans NoteRow s'occupera automatiquement de sauvegarder
+            // et de déclencher la correction auto si nécessaire
             self.blocks[index].content = newContent
-            
-            if let id = self.blocks[index].id {
-                self.sauvegarderContenu(id: id, content: newContent)
-                
-                // Rétablissement de la correction auto
-                self.declencherCorrectionAuto(pour: id, contenuActuel: newContent)
-            }
+
+            // NOTE: On ne fait PAS de double appel ici car le onChange le fait déjà:
+            // - sauvegarderContenu est appelé par onChange(of: note.content) dans NoteRow
+            // - declencherCorrectionAuto est aussi appelé par onChange si isAutoCorrectActive
         }
     }
     
