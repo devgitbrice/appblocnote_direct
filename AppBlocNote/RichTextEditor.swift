@@ -5,6 +5,7 @@ struct RichTextEditor: UIViewRepresentable {
     @Binding var text: String
     @Binding var dynamicHeight: CGFloat
     var fontSize: Double
+    var availableWidth: CGFloat = 0  // 🔧 FIX: Largeur disponible depuis GeometryReader
     var onTagClick: ((String) -> Void)? = nil
     
     func makeUIView(context: Context) -> UITextView {
@@ -47,13 +48,13 @@ struct RichTextEditor: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: UITextView, context: Context) {
-        // 🔧 FIX TEXTE VERTICAL: Forcer le layout pour que le textContainer ait la bonne largeur
-        uiView.layoutIfNeeded()
-
-        // S'assurer que le textContainer a la bonne largeur (fix iPad/split view)
-        if uiView.frame.width > 0 {
-            uiView.textContainer.size.width = uiView.frame.width
+        // 🔧 FIX TEXTE VERTICAL: Utiliser la largeur fournie par GeometryReader
+        let width = availableWidth > 0 ? availableWidth : uiView.frame.width
+        if width > 0 {
+            uiView.frame.size.width = width
+            uiView.textContainer.size.width = width
         }
+        uiView.layoutIfNeeded()
 
         // Mise à jour du texte (Uniquement si changé pour éviter les boucles)
         if context.coordinator.lastText != text {
@@ -68,8 +69,8 @@ struct RichTextEditor: UIViewRepresentable {
             context.coordinator.lastFontSize = fontSize
         }
         
-        // Recalcul hauteur
-        context.coordinator.recalculateHeight(view: uiView, dynamicHeight: $dynamicHeight)
+        // Recalcul hauteur avec la largeur disponible
+        context.coordinator.recalculateHeight(view: uiView, dynamicHeight: $dynamicHeight, availableWidth: width)
     }
     
     // On utilise notre classe renommée

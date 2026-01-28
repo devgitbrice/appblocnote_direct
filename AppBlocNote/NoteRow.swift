@@ -177,16 +177,18 @@ struct NoteRow: View {
     }
     
     var editorView: some View {
-        // On passe 'onTagClick' pour gérer l'ouverture des tags
-        RichTextEditor(
-            text: $note.content,
-            dynamicHeight: $rowHeight,
-            fontSize: fontSize,
-            onTagClick: { tag in
-                // C'est ici qu'on déclenche l'ouverture
-                manager.openTag(tag)
-            }
-        )
+        // 🔧 FIX: Utiliser GeometryReader pour capturer la largeur réelle
+        GeometryReader { geometry in
+            RichTextEditor(
+                text: $note.content,
+                dynamicHeight: $rowHeight,
+                fontSize: fontSize,
+                availableWidth: geometry.size.width,
+                onTagClick: { tag in
+                    manager.openTag(tag)
+                }
+            )
+        }
         .frame(height: max(60, rowHeight))
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
