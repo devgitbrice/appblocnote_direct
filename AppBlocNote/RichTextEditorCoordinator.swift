@@ -3,6 +3,7 @@ import UIKit
 
 class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
     var parent: RichTextEditor
+    weak var currentTextView: UITextView?
     var lastText: String = ""
     var lastFontSize: Double = 0
 
@@ -10,48 +11,83 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
         self.parent = parent
     }
 
-    // --- MISE À JOUR DU TEXTE (Avec Patch Visuel) ---
+    // --- 1. RECEPTION ET ANALYSE ---
     func updateTextContent(textView: UITextView, html: String, fontSize: Double) {
         
-        // TEST 4 : PATCH CSS "INLINE"
-        // On force les balises <p> à se comporter comme des mots qui se suivent,
-        // et non comme des blocs qui vont à la ligne.
+        // PROTECTION ANTI-BOUCLE
+        if html == lastText { return }
+        
+        print("\n⬇️ [UPDATE] HTML Reçu (len: \(html.count))")
+
+        // 1. NETTOYAGE & RÉPARATION ESPACES
+        var cleanContent = html.replacingOccurrences(of: "&nbsp;", with: " ")
+        cleanContent = cleanContent.replacingOccurrences(of: "\u{00A0}", with: " ")
+        
+        // Extraction Body
+        if let bodyStart = cleanContent.range(of: "<body"), let bodyEnd = cleanContent.range(of: "</body>") {
+            let content = String(cleanContent[bodyStart.lowerBound..<bodyEnd.lowerBound])
+            if let firstTag = content.firstIndex(of: ">") {
+                cleanContent = String(content[content.index(after: firstTag)...])
+            }
+        } else {
+            cleanContent = cleanContent.replacingOccurrences(of: "<!DOCTYPE html>", with: "")
+            cleanContent = cleanContent.replacingOccurrences(of: "<html>", with: "")
+            cleanContent = cleanContent.replacingOccurrences(of: "<body>", with: "")
+            cleanContent = cleanContent.replacingOccurrences(of: "</body>", with: "")
+            cleanContent = cleanContent.replacingOccurrences(of: "</html>", with: "")
+        }
+        
+        cleanContent = cleanContent.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 2. CSS CORRECTIF (AVEC INLINE-BLOCK)
         let cssStyle = """
         <style>
             body { 
                 font-family: -apple-system; 
                 font-size: \(fontSize)px; 
+                
+                /* CONTRAINTES DE LARGEUR */
                 width: 100%; 
-                margin: 0; 
-                padding: 0; 
+                max-width: 100%;
+                overflow-x: hidden; /* Coupe ce qui dépasse */
+                box-sizing: border-box;
+                
+                word-wrap: break-word; 
+                overflow-wrap: break-word; 
+                white-space: pre-wrap; /* CRITIQUE pour les espaces */
+                color: #000000;
+                margin: 0; padding: 0;
             }
-            p {
-                display: inline; /* FORCE L'ALIGNEMENT HORIZONTAL */
-                margin-right: 4px; /* Un petit espace entre les morceaux recollés */
+            
+            /* LE FIX DE L'ESPACE : inline-block au lieu de inline */
+            p { 
+                display: inline-block; 
+                margin-right: 4px; 
             }
+            
+            ul, ol, li, div, br { display: block !important; }
+            ul, ol { margin-top: 10px; margin-bottom: 10px; padding-left: 20px; }
+            li { display: list-item !important; margin-bottom: 4px; }
         </style>
         """
         
-        let fullHtml = "<!DOCTYPE html><html><head>\(cssStyle)</head><body>\(html)</body></html>"
+        let fullHtml = "<!DOCTYPE html><html><head>\(cssStyle)</head><body>\(cleanContent)</body></html>"
         
         if let data = fullHtml.data(using: .utf8) {
-            if let attr = try? NSAttributedString(
-                data: data,
-                options: [.documentType: NSAttributedString.DocumentType.html, .characterEncoding: String.Encoding.utf8.rawValue],
-                documentAttributes: nil
-            ) {
+            let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+                .documentType: NSAttributedString.DocumentType.html,
+                .characterEncoding: String.Encoding.utf8.rawValue
+            ]
+            
+            if let attr = try? NSAttributedString(data: data, options: options, documentAttributes: nil) {
                 let mutable = NSMutableAttributedString(attributedString: attr)
                 let range = NSRange(location: 0, length: mutable.length)
-                
-                // On remet les couleurs correctes
                 mutable.addAttribute(.foregroundColor, value: UIColor.label, range: range)
                 mutable.addAttribute(.font, value: UIFont.systemFont(ofSize: CGFloat(fontSize)), range: range)
                 
-                applyCustomFormatting(to: mutable)
-                
                 textView.attributedText = mutable
             } else {
-                textView.text = html
+                textView.text = cleanContent
             }
         }
     }
@@ -64,45 +100,70 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
         textView.attributedText = mutable
     }
 
-    // --- SAUVEGARDE ---
+    // --- 3. INTERCEPTION CLAVIER (LOGS) ---
+    func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+        if text == " " {
+            print("\n⌨️ [CLAVIER] Barre Espace Appuyée")
+        }
+        return true
+    }
+
+    // --- 4. VERIFICATION APRES FRAPPE ---
     func textViewDidChange(_ textView: UITextView) {
+        
+        // LOG VISUEL : Est-ce que l'espace est là ?
+        if let txt = textView.text, let last = txt.last {
+            if last == " " {
+                print("   ✅ [VISUEL] Espace PRÉSENT (OK)")
+            } else {
+                // Ignore si c'est un retour ligne
+                if last != "\n" {
+                    print("   ❌ [VISUEL] Espace ABSENT (Dernier char: '\(last)')")
+                }
+            }
+        }
+
         if let attr = textView.attributedText {
             if let data = try? attr.data(from: NSRange(location: 0, length: attr.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.html]),
-               let fullHtml = String(data: data, encoding: .utf8) {
+               var fullHtml = String(data: data, encoding: .utf8) {
+                
+                // FIX ESPACE INSÉCABLE AVANT SAUVEGARDE
+                fullHtml = fullHtml.replacingOccurrences(of: "&nbsp;", with: " ")
                 
                 if parent.text != fullHtml {
-                    parent.text = fullHtml
+                    print("   💾 [SAVE] Sauvegarde (longueur: \(fullHtml.count))")
                     lastText = fullHtml
+                    parent.text = fullHtml
                 }
             }
         }
         
+        // Maintien visuel
         textView.font = UIFont.systemFont(ofSize: CGFloat(parent.fontSize))
         textView.textColor = UIColor.label
         
-        let width = textView.bounds.width > 0 ? textView.bounds.width : UIScreen.main.bounds.width
-        let size = textView.sizeThatFits(CGSize(width: width, height: .infinity))
+        // Hauteur bornée
+        let fixedWidth = UIScreen.main.bounds.width - 40
+        let size = textView.sizeThatFits(CGSize(width: fixedWidth, height: .infinity))
         let newHeight = size.height + 20
         if abs(parent.dynamicHeight - newHeight) > 2 {
             parent.dynamicHeight = newHeight
         }
     }
     
-    // --- GESTION DES CLICS ---
+    // --- AUTRES ---
     func textView(_ textView: UITextView, shouldInteractWith URL: URL, in characterRange: NSRange, interaction: UITextItemInteraction) -> Bool {
         if URL.scheme == "tag" {
             let tag = URL.absoluteString.replacingOccurrences(of: "tag://", with: "").removingPercentEncoding ?? ""
             parent.onTagClick?(tag)
             return false
         }
-        if URL.scheme == "search" {
-             return false
-         }
+        if URL.scheme == "search" { return false }
         UIApplication.shared.open(URL)
         return false
     }
 
-    @objc func dismissKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
+    @objc func toggleBulletList() { currentTextView?.insertText("\n• ") }
+    @objc func toggleNumberList() { currentTextView?.insertText("\n1. ") }
+    @objc func dismissKeyboard() { currentTextView?.resignFirstResponder() }
 }

@@ -8,19 +8,20 @@ struct RichTextEditor: UIViewRepresentable {
     var onTagClick: ((String) -> Void)? = nil
 
     func makeUIView(context: Context) -> UITextView {
-        // Utilisation de la classe technique qui force le layout
         let textView = ForceLayoutTextView()
-
+        
+        // Connexion
+        context.coordinator.currentTextView = textView
+        
         textView.isEditable = true
         textView.isSelectable = true
-        textView.isScrollEnabled = false
+        textView.isScrollEnabled = false // CRITIQUE : Empêche le scroll interne
         textView.backgroundColor = .clear
 
-        // Gestion de la largeur pour éviter l'écrasement
+        // Contraintes pour empêcher l'élargissement infini
         textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-
-        // Marges et Padding
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        
         textView.textContainer.lineFragmentPadding = 0
         textView.textContainerInset = UIEdgeInsets(top: 8, left: 5, bottom: 8, right: 5)
         
@@ -30,8 +31,11 @@ struct RichTextEditor: UIViewRepresentable {
 
         // Toolbar
         let toolBar = UIToolbar(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44))
+        let bullet = UIBarButtonItem(image: UIImage(systemName: "list.bullet"), style: .plain, target: context.coordinator, action: #selector(RichTextEditorCoordinator.toggleBulletList))
+        let number = UIBarButtonItem(image: UIImage(systemName: "list.number"), style: .plain, target: context.coordinator, action: #selector(RichTextEditorCoordinator.toggleNumberList))
+        let space = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
         let done = UIBarButtonItem(title: "OK", style: .done, target: context.coordinator, action: #selector(RichTextEditorCoordinator.dismissKeyboard))
-        toolBar.items = [.flexibleSpace(), done]
+        toolBar.items = [bullet, number, space, done]
         textView.inputAccessoryView = toolBar
 
         textView.delegate = context.coordinator
@@ -48,10 +52,18 @@ struct RichTextEditor: UIViewRepresentable {
             context.coordinator.lastFontSize = fontSize
         }
 
-        // Calcul hauteur
         DispatchQueue.main.async {
-            let fitSize = uiView.sizeThatFits(CGSize(width: uiView.bounds.width, height: .infinity))
+            // FIX LARGEUR : On calcule la hauteur basée sur la largeur de l'ÉCRAN, pas du texte
+            let fixedWidth = UIScreen.main.bounds.width - 40 // Marge de sécurité
+            let fitSize = uiView.sizeThatFits(CGSize(width: fixedWidth, height: .infinity))
+            
             let newHeight = fitSize.height + 20
+            
+            // LOG LARGEUR
+            if uiView.contentSize.width > fixedWidth + 50 {
+                print("🚨 [LAYOUT] DÉBORDEMENT DÉTECTÉ ! Content: \(uiView.contentSize.width) vs Screen: \(fixedWidth)")
+            }
+
             if abs(self.dynamicHeight - newHeight) > 2 {
                 self.dynamicHeight = newHeight
             }
@@ -63,14 +75,17 @@ struct RichTextEditor: UIViewRepresentable {
     }
 }
 
-// Classe indispensable pour garantir que le texte prend toute la largeur
+// Classe qui force le layout à respecter les bornes
 class ForceLayoutTextView: UITextView {
     override func layoutSubviews() {
         super.layoutSubviews()
-        let availableWidth = bounds.width - (textContainerInset.left + textContainerInset.right)
-        if textContainer.size.width != availableWidth && availableWidth > 0 {
-            textContainer.size.width = availableWidth
-            layoutManager.textContainerChangedGeometry(textContainer)
+        
+        if bounds.width > 0 {
+            let maxAvailableWidth = bounds.width - (textContainerInset.left + textContainerInset.right)
+            if textContainer.size.width != maxAvailableWidth {
+                textContainer.size.width = maxAvailableWidth
+                layoutManager.textContainerChangedGeometry(textContainer)
+            }
         }
     }
 }
