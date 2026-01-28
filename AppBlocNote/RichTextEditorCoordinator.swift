@@ -10,12 +10,25 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
         self.parent = parent
     }
 
-    // --- MISE À JOUR DU TEXTE ---
+    // --- MISE À JOUR DU TEXTE (Avec Patch Visuel) ---
     func updateTextContent(textView: UITextView, html: String, fontSize: Double) {
-        // Protection CSS : on force le texte à s'adapter
+        
+        // TEST 4 : PATCH CSS "INLINE"
+        // On force les balises <p> à se comporter comme des mots qui se suivent,
+        // et non comme des blocs qui vont à la ligne.
         let cssStyle = """
         <style>
-            body { font-family: -apple-system; font-size: \(fontSize)px; width: 100%; word-wrap: break-word; margin: 0; padding: 0; }
+            body { 
+                font-family: -apple-system; 
+                font-size: \(fontSize)px; 
+                width: 100%; 
+                margin: 0; 
+                padding: 0; 
+            }
+            p {
+                display: inline; /* FORCE L'ALIGNEMENT HORIZONTAL */
+                margin-right: 4px; /* Un petit espace entre les morceaux recollés */
+            }
         </style>
         """
         
@@ -30,11 +43,10 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
                 let mutable = NSMutableAttributedString(attributedString: attr)
                 let range = NSRange(location: 0, length: mutable.length)
                 
-                // Nettoyage des styles parasites
+                // On remet les couleurs correctes
                 mutable.addAttribute(.foregroundColor, value: UIColor.label, range: range)
                 mutable.addAttribute(.font, value: UIFont.systemFont(ofSize: CGFloat(fontSize)), range: range)
                 
-                // Application de tes liens/tags
                 applyCustomFormatting(to: mutable)
                 
                 textView.attributedText = mutable
@@ -55,7 +67,6 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
     // --- SAUVEGARDE ---
     func textViewDidChange(_ textView: UITextView) {
         if let attr = textView.attributedText {
-            // Conversion propre
             if let data = try? attr.data(from: NSRange(location: 0, length: attr.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.html]),
                let fullHtml = String(data: data, encoding: .utf8) {
                 
@@ -66,11 +77,9 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
             }
         }
         
-        // Maintien du style visuel immédiat
         textView.font = UIFont.systemFont(ofSize: CGFloat(parent.fontSize))
         textView.textColor = UIColor.label
         
-        // Recalcul hauteur
         let width = textView.bounds.width > 0 ? textView.bounds.width : UIScreen.main.bounds.width
         let size = textView.sizeThatFits(CGSize(width: width, height: .infinity))
         let newHeight = size.height + 20
@@ -87,7 +96,6 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
             return false
         }
         if URL.scheme == "search" {
-             // ... gestion recherche google ...
              return false
          }
         UIApplication.shared.open(URL)

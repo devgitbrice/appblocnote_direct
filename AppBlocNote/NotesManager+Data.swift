@@ -13,7 +13,6 @@ extension NotesManager {
             let cats: [NoteCategory] = try await client
                 .from("site_notes_categories")
                 .select()
-                // TRI : D'abord les épinglés, ensuite l'ordre manuel
                 .order("is_pinned", ascending: false)
                 .order("order_index", ascending: true)
                 .execute()
@@ -31,11 +30,8 @@ extension NotesManager {
     
     func ajouterCategorie(nom: String) async {
         guard let userId = client.auth.currentUser?.id else { return }
-        
         let maxIndex = categories.map { $0.order_index }.max() ?? 0
-        let newIndex = maxIndex + 1
-        
-        let newCat = NoteCategory(name: nom, user_id: userId, order_index: newIndex)
+        let newCat = NoteCategory(name: nom, user_id: userId, order_index: maxIndex + 1)
         
         do {
             try await client.from("site_notes_categories").insert(newCat).execute()
@@ -60,18 +56,9 @@ extension NotesManager {
         var updatedCategories = categories
         updatedCategories.move(fromOffsets: source, toOffset: destination)
         self.categories = updatedCategories
-        
         Task {
             for (index, category) in updatedCategories.enumerated() {
-                do {
-                    try await client
-                        .from("site_notes_categories")
-                        .update(["order_index": index])
-                        .eq("id", value: category.id)
-                        .execute()
-                } catch {
-                    print("❌ Erreur update index: \(error)")
-                }
+                try? await client.from("site_notes_categories").update(["order_index": index]).eq("id", value: category.id).execute()
             }
         }
     }
@@ -87,9 +74,7 @@ extension NotesManager {
                 }
             }
         }
-        do {
-            try await client.from("site_notes_categories").update(["is_pinned": newState]).eq("id", value: category.id).execute()
-        } catch { print("❌ Erreur pin: \(error)") }
+        try? await client.from("site_notes_categories").update(["is_pinned": newState]).eq("id", value: category.id).execute()
     }
     
     func toggleCategoryRed(category: NoteCategory) async {
@@ -97,9 +82,7 @@ extension NotesManager {
         if let index = categories.firstIndex(where: { $0.id == category.id }) {
             categories[index].is_red = newState
         }
-        do {
-            try await client.from("site_notes_categories").update(["is_red": newState]).eq("id", value: category.id).execute()
-        } catch { print("❌ Erreur red: \(error)") }
+        try? await client.from("site_notes_categories").update(["is_red": newState]).eq("id", value: category.id).execute()
     }
 
     // ==========================================
@@ -122,39 +105,29 @@ extension NotesManager {
         }
     }
     
-    // --- 🆕 NOUVELLE FONCTION : CHARGER TOUS LES ÉPINGLÉS ---
     func chargerToutesLesNotesEpingles() {
         Task {
             do {
                 let notes: [NoteBlock] = try await client
                     .from("site_notes_blocks")
                     .select()
-                    .eq("is_pinned", value: true) // On prend TOUT ce qui est épinglé
-                    .order("updated_at", ascending: false) // Les plus récents en premier
+                    .eq("is_pinned", value: true)
+                    .order("updated_at", ascending: false)
                     .execute()
                     .value
                 
                 await MainActor.run {
                     self.blocks = notes
-                    // On crée une fausse catégorie pour l'affichage du titre
-                    // On met un UUID bidon pour éviter les crashs, mais on le reconnaîtra par son nom
                     if let currentUser = client.auth.currentUser {
-                        self.selectedCategory = NoteCategory(
-                            id: UUID(), // ID temporaire
-                            name: "📌 Épinglés (Tous)",
-                            user_id: currentUser.id,
-                            order_index: -1
-                        )
+                        self.selectedCategory = NoteCategory(id: UUID(), name: "📌 Épinglés (Tous)", user_id: currentUser.id, order_index: -1)
                     }
                 }
-            } catch {
-                print("❌ Erreur chargement épinglés: \(error)")
-            }
+            } catch { print("❌ Erreur chargement épinglés: \(error)") }
         }
     }
     
+    // --- 🚨 FONCTION DE TEST DIAGNOSTIC 🚨 ---
     func ajouterNote() {
-        // PROTECTION : Si on est dans le dossier "Épinglés", on interdit l'ajout car on ne sait pas dans quel vrai dossier mettre la note.
         if selectedCategory?.name == "📌 Épinglés (Tous)" {
             print("⚠️ Impossible d'ajouter une note ici. Va dans un vrai dossier.")
             return
@@ -167,12 +140,14 @@ extension NotesManager {
         let newId = UUID()
         let newNote = NoteBlock(id: newId, content: "", order_index: newIndex)
         
-        withAnimation {
-            blocks.insert(newNote, at: 0)
-        }
+        // 1. AJOUT OPTIMISTE (UI)
+        withAnimation { blocks.insert(newNote, at: 0) }
         
         Task {
-            guard let userId = client.auth.currentUser?.id else { return }
+            guard let userId = client.auth.currentUser?.id else {
+                print("❌ ERREUR CRITIQUE : Pas d'utilisateur connecté !")
+                return
+            }
             
             let payload = NoteInsertPayload(
                 id: newId,
@@ -183,10 +158,16 @@ extension NotesManager {
             )
             
             do {
+                // 2. TENTATIVE D'ENVOI SUPABASE (LOGS)
+                print("📡 [TEST MAC] Tentative d'envoi de la note ID : \(newId)")
                 try await client.from("site_notes_blocks").insert(payload).execute()
-                print("✅ Note créée ID : \(newId)")
+                print("✅ [TEST MAC] SUCCÈS : Note enregistrée dans Supabase !")
             } catch {
-                print("❌ Erreur ajout note: \(error)")
+                // 3. CAS D'ERREUR
+                print("❌❌❌ ERREUR FATALE SUR MAC ❌❌❌")
+                print("L'erreur est : \(error)")
+                print("Description : \(error.localizedDescription)")
+                
                 await MainActor.run {
                     if let idx = blocks.firstIndex(where: { $0.id == newId }) {
                         withAnimation { blocks.remove(at: idx) }
@@ -212,19 +193,15 @@ extension NotesManager {
     
     func togglePin(id: UUID) {
         if let index = blocks.firstIndex(where: { $0.id == id }) {
-            // Si on est dans le dossier "Tous les épinglés" et qu'on désépingle, la note doit disparaître de la liste
             let isGlobalPinnedView = selectedCategory?.name == "📌 Épinglés (Tous)"
-            
             blocks[index].is_pinned.toggle()
             let newState = blocks[index].is_pinned
             
             if isGlobalPinnedView && !newState {
-                // On la retire de l'écran immédiatement
                 withAnimation { blocks.remove(at: index) }
             } else {
                 withAnimation { blocks.sort { ($0.is_pinned && !$1.is_pinned) || ($0.is_pinned == $1.is_pinned && $0.order_index < $1.order_index) } }
             }
-            
             Task {
                 let payload = NoteUpdatePinPayload(is_pinned: newState)
                 try? await client.from("site_notes_blocks").update(payload).eq("id", value: id).execute()
