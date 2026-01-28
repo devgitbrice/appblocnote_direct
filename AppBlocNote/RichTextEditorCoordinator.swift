@@ -37,7 +37,8 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
             cleanContent = cleanContent.replacingOccurrences(of: "</html>", with: "")
         }
         
-        cleanContent = cleanContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        // ✅ FIX ESPACE : On ne supprime QUE les retours à la ligne, PAS les espaces !
+        cleanContent = cleanContent.trimmingCharacters(in: .newlines)
 
         // ✅ FIX : Si contenu vide, initialiser typingAttributes et sortir
         if cleanContent.isEmpty {
