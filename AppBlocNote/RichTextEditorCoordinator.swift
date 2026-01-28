@@ -6,6 +6,7 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
     var parent: RichTextEditor
     var lastText: String = ""
     var lastFontSize: Double = 0
+    var currentWidth: CGFloat = UIScreen.main.bounds.width  // 🔧 FIX: Stocker la largeur actuelle
     
     init(_ parent: RichTextEditor) {
         self.parent = parent
@@ -53,23 +54,28 @@ class RichTextEditorCoordinator: NSObject, UITextViewDelegate {
     // --- GESTION DU CLAVIER (Venant de l'utilisateur) ---
     
     func textViewDidChange(_ textView: UITextView) {
+        // 🔧 FIX: S'assurer que le textContainer a la bonne largeur pendant la frappe
+        if currentWidth > 0 {
+            textView.textContainer.size.width = currentWidth
+        }
+
         // Sauvegarde HTML
         if let attr = textView.attributedText {
             if let data = try? attr.data(from: NSRange(location: 0, length: attr.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.html]),
                let html = String(data: data, encoding: .utf8) {
-                
+
                 if parent.text != html {
                     parent.text = html
                     lastText = html
                 }
             }
         }
-        
+
         // Force la réapplication de la police pour le confort visuel immédiat
         textView.font = UIFont.systemFont(ofSize: CGFloat(parent.fontSize))
         textView.textColor = UIColor.label
-        
-        recalculateHeight(view: textView, dynamicHeight: parent.$dynamicHeight)
+
+        recalculateHeight(view: textView, dynamicHeight: parent.$dynamicHeight, availableWidth: currentWidth)
     }
     
     // --- GESTION DU CLIC ---
