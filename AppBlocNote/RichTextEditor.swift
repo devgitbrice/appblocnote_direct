@@ -8,8 +8,8 @@ struct RichTextEditor: UIViewRepresentable {
     var onTagClick: ((String) -> Void)? = nil
     
     func makeUIView(context: Context) -> UITextView {
-        // CORRECTION VERTICALE : On force une largeur explicite au départ
-        let textView = UITextView(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44))
+        // On laisse SwiftUI gérer la taille - ne pas forcer une largeur fixe
+        let textView = UITextView()
         
         textView.isEditable = true
         textView.isSelectable = true
@@ -19,10 +19,12 @@ struct RichTextEditor: UIViewRepresentable {
         // --- CORRECTION CRUCIALE POUR LE TEXTE VERTICAL ---
         // 1. On dit à la vue de s'étirer dans son parent
         textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        // 2. On dit au conteneur de texte de suivre la largeur de la vue (C'EST ÇA QUI MANQUAIT)
+        // 2. On dit au conteneur de texte de suivre la largeur de la vue
         textView.textContainer.widthTracksTextView = true
         // 3. On force le mode de rupture de ligne standard
         textView.textContainer.lineBreakMode = .byWordWrapping
+        // 4. Pas de limite de largeur pour le textContainer (laisse SwiftUI décider)
+        textView.textContainer.size = CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         
         // Configuration Layout stricte
         textView.textContainerInset = .zero
@@ -45,6 +47,14 @@ struct RichTextEditor: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: UITextView, context: Context) {
+        // 🔧 FIX TEXTE VERTICAL: Forcer le layout pour que le textContainer ait la bonne largeur
+        uiView.layoutIfNeeded()
+
+        // S'assurer que le textContainer a la bonne largeur (fix iPad/split view)
+        if uiView.frame.width > 0 {
+            uiView.textContainer.size.width = uiView.frame.width
+        }
+
         // Mise à jour du texte (Uniquement si changé pour éviter les boucles)
         if context.coordinator.lastText != text {
             // Notez le label 'html:' qui correspond bien à la définition du coordinateur
