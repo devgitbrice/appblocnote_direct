@@ -20,12 +20,12 @@ struct RichTextEditor: UIViewRepresentable {
         // --- CORRECTION CRUCIALE POUR LE TEXTE VERTICAL ---
         // 1. On dit à la vue de s'étirer dans son parent
         textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        // 2. On dit au conteneur de texte de suivre la largeur de la vue
-        textView.textContainer.widthTracksTextView = true
+        // 2. NE PAS utiliser widthTracksTextView - on gère manuellement dans updateUIView
+        textView.textContainer.widthTracksTextView = false
         // 3. On force le mode de rupture de ligne standard
         textView.textContainer.lineBreakMode = .byWordWrapping
-        // 4. Pas de limite de largeur pour le textContainer (laisse SwiftUI décider)
-        textView.textContainer.size = CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        // 4. Grande largeur par défaut (sera ajustée dans updateUIView)
+        textView.textContainer.size = CGSize(width: UIScreen.main.bounds.width, height: CGFloat.greatestFiniteMagnitude)
         
         // Configuration Layout stricte
         textView.textContainerInset = .zero
@@ -53,6 +53,8 @@ struct RichTextEditor: UIViewRepresentable {
         if width > 0 {
             uiView.frame.size.width = width
             uiView.textContainer.size.width = width
+            // Stocker la largeur dans le coordinateur pour textViewDidChange
+            context.coordinator.currentWidth = width
         }
         uiView.layoutIfNeeded()
 
