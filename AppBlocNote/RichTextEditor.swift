@@ -8,16 +8,18 @@ struct RichTextEditor: UIViewRepresentable {
     var onTagClick: ((String) -> Void)? = nil
 
     func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
+        // Utilisation de notre sous-classe personnalisée
+        let textView = DynamicTextView()
+
         textView.isEditable = true
         textView.isScrollEnabled = false
         textView.backgroundColor = .clear
-
-        // CONFIGURATION CRITIQUE
         textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        textView.textContainer.widthTracksTextView = true
+        
+        // Configuration critique du conteneur
         textView.textContainer.lineFragmentPadding = 0
-        textView.textContainerInset = UIEdgeInsets(top: 8, left: 4, bottom: 8, right: 4)
+        textView.textContainerInset = UIEdgeInsets(top: 8, left: 5, bottom: 8, right: 5)
+        textView.textContainer.widthTracksTextView = true // Doit être true
 
         textView.font = UIFont.systemFont(ofSize: CGFloat(fontSize))
         textView.textColor = UIColor.label
@@ -42,19 +44,10 @@ struct RichTextEditor: UIViewRepresentable {
             context.coordinator.lastFontSize = fontSize
         }
 
+        // Calcul de hauteur
         DispatchQueue.main.async {
-            // --- LOGS DE DIAGNOSTIC ---
-            let w = uiView.frame.width
-            let screen = UIScreen.main.bounds.width
-            print("🔍 DEBUG: Frame Width: \(w) | Screen: \(screen)")
-
-            // Si largeur < 50, on force une largeur théorique pour le calcul de hauteur
-            let safeWidth = w > 50 ? w : (screen - 60) 
-            let size = uiView.sizeThatFits(CGSize(width: safeWidth, height: .infinity))
+            let size = uiView.sizeThatFits(CGSize(width: uiView.bounds.width, height: .infinity))
             let newHeight = size.height + 20
-            
-            print("🔍 DEBUG: Hauteur calculée: \(newHeight) (sur largeur: \(safeWidth))")
-
             if abs(self.dynamicHeight - newHeight) > 2 {
                 self.dynamicHeight = newHeight
             }
@@ -63,5 +56,17 @@ struct RichTextEditor: UIViewRepresentable {
 
     func makeCoordinator() -> RichTextEditorCoordinator {
         RichTextEditorCoordinator(self)
+    }
+}
+
+// --- SOUS-CLASSE POUR FORCER LE LAYOUT ---
+class DynamicTextView: UITextView {
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // FORCE le conteneur de texte à prendre toute la largeur de la vue
+        // C'est souvent ce qui manque quand le texte reste vertical
+        if textContainer.size.width != bounds.width {
+            textContainer.size.width = bounds.width
+        }
     }
 }
