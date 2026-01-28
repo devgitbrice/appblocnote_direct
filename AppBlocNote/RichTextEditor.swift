@@ -15,19 +15,18 @@ struct RichTextEditor: UIViewRepresentable {
         textView.isScrollEnabled = false
         textView.backgroundColor = .clear
 
-        // Configuration du texte
+        // CORRECTION 1 : On force la largeur flexible explicite
+        textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        
+        // CORRECTION 2 : Le conteneur de texte doit impérativement suivre la vue
+        textView.textContainer.widthTracksTextView = true
+        
         textView.font = UIFont.systemFont(ofSize: CGFloat(fontSize))
         textView.textColor = UIColor.label
 
-        // CORRECTION: On laisse autoresizingMask (true par défaut) gérer le layout SwiftUI
-        // On ne force pas le translatesAutoresizingMaskIntoConstraints à false
-
-        // Configuration du textContainer
         textView.textContainer.lineBreakMode = .byWordWrapping
-        textView.textContainerInset = UIEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
+        textView.textContainerInset = UIEdgeInsets(top: 8, left: 5, bottom: 8, right: 5)
         textView.textContainer.lineFragmentPadding = 0
-
-        // Désactivation des détecteurs Apple pour gérer nos propres liens
         textView.dataDetectorTypes = []
 
         // Toolbar
@@ -38,31 +37,36 @@ struct RichTextEditor: UIViewRepresentable {
         textView.inputAccessoryView = toolBar
 
         textView.delegate = context.coordinator
-
         return textView
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {
-        // CORRECTION: Suppression de la gestion manuelle des contraintes ici.
-        // SwiftUI s'en charge.
-
-        // Mise à jour du texte (Uniquement si changé pour éviter les boucles)
+        // Mise à jour du texte
         if context.coordinator.lastText != text {
             context.coordinator.updateTextContent(textView: uiView, html: text, fontSize: fontSize)
             context.coordinator.lastText = text
         }
 
-        // Mise à jour de la police (Uniquement si changée)
+        // Mise à jour de la police
         if context.coordinator.lastFontSize != fontSize {
             context.coordinator.updateFontSize(textView: uiView, fontSize: fontSize)
             context.coordinator.lastFontSize = fontSize
         }
 
-        // Recalcul hauteur
+        // CORRECTION 3 : Calcul de hauteur sécurisé
         DispatchQueue.main.async {
-            let width = uiView.bounds.width > 0 ? uiView.bounds.width : UIScreen.main.bounds.width
-            let size = uiView.sizeThatFits(CGSize(width: width, height: .infinity))
+            // Si la vue fait moins de 50px de large, c'est un bug -> on utilise la largeur d'écran
+            let screenWidth = UIScreen.main.bounds.width
+            let viewWidth = uiView.bounds.width
+            
+            // On prend la largeur réelle, sinon une largeur par défaut confortable
+            let safeWidth = viewWidth > 50 ? viewWidth : (screenWidth - 40)
+            
+            let sizeToFit = CGSize(width: safeWidth, height: .infinity)
+            let size = uiView.sizeThatFits(sizeToFit)
+            
             let newHeight = size.height + 20 // Marge de sécurité
+            
             if abs(self.dynamicHeight - newHeight) > 2 {
                 self.dynamicHeight = newHeight
             }
