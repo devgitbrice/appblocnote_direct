@@ -177,19 +177,15 @@ struct NoteRow: View {
     }
     
     var editorView: some View {
-        // 🔧 FIX: Utiliser GeometryReader pour capturer la largeur réelle
-        GeometryReader { geometry in
-            RichTextEditor(
-                text: $note.content,
-                dynamicHeight: $rowHeight,
-                fontSize: fontSize,
-                availableWidth: geometry.size.width,
-                onTagClick: { tag in
-                    manager.openTag(tag)
-                }
-            )
-        }
-        .frame(height: max(60, rowHeight))
+        RichTextEditor(
+            text: $note.content,
+            dynamicHeight: $rowHeight,
+            fontSize: fontSize,
+            onTagClick: { tag in
+                manager.openTag(tag)
+            }
+        )
+        .frame(maxWidth: .infinity, minHeight: 60, maxHeight: max(60, rowHeight))
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .onChange(of: note.content) { newValue in
