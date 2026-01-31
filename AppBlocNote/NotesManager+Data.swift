@@ -105,20 +105,16 @@ extension NotesManager {
             }
         }
 
-        // Mise à jour Supabase
+        // Mise à jour Supabase avec payload Encodable
+        struct SectionIdPayload: Encodable {
+            let section_id: UUID?
+        }
+
         do {
-            if let sectionId = newSectionId {
-                try await client.from("site_notes_categories")
-                    .update(["section_id": sectionId.uuidString])
-                    .eq("id", value: categoryId)
-                    .execute()
-            } else {
-                // Pour mettre null, on utilise une structure spéciale
-                try await client.from("site_notes_categories")
-                    .update(["section_id": NSNull()])
-                    .eq("id", value: categoryId)
-                    .execute()
-            }
+            try await client.from("site_notes_categories")
+                .update(SectionIdPayload(section_id: newSectionId))
+                .eq("id", value: categoryId)
+                .execute()
         } catch {
             print("❌ Erreur déplacement catégorie: \(error)")
         }
