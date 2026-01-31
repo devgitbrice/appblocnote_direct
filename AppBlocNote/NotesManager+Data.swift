@@ -3,11 +3,131 @@ import Supabase
 import SwiftUI
 
 extension NotesManager {
-    
+
+    // ==========================================
+    // 0. GESTION DES SECTIONS
+    // ==========================================
+
+    func chargerSections() async {
+        do {
+            let sects: [Section] = try await client
+                .from("site_notes_sections")
+                .select()
+                .order("order_index", ascending: true)
+                .execute()
+                .value
+
+            self.sections = sects
+
+            // Si pas de sections, créer HOME par défaut
+            if sections.isEmpty {
+                await creerSectionParDefaut()
+            } else if selectedSection == nil {
+                self.selectedSection = sections.first
+            }
+        } catch {
+            print("❌ Erreur chargement sections: \(error)")
+            // Si la table n'existe pas encore, créer une section HOME locale
+            if sections.isEmpty {
+                await creerSectionParDefaut()
+            }
+        }
+    }
+
+    private func creerSectionParDefaut() async {
+        guard let userId = client.auth.currentUser?.id else { return }
+        let homeSection = Section.defaultHome(userId: userId)
+
+        do {
+            try await client.from("site_notes_sections").insert(homeSection).execute()
+            self.sections = [homeSection]
+            self.selectedSection = homeSection
+        } catch {
+            print("❌ Erreur création section HOME: \(error)")
+            // Utiliser localement même si Supabase échoue
+            self.sections = [homeSection]
+            self.selectedSection = homeSection
+        }
+    }
+
+    func ajouterSection(nom: String, icon: String = "folder.fill") async {
+        guard let userId = client.auth.currentUser?.id else { return }
+        let maxIndex = sections.map { $0.order_index }.max() ?? 0
+        let newSection = Section(name: nom, user_id: userId, order_index: maxIndex + 1, icon: icon)
+
+        do {
+            try await client.from("site_notes_sections").insert(newSection).execute()
+            await chargerSections()
+            self.selectedSection = sections.last
+        } catch {
+            print("❌ Erreur ajout section: \(error)")
+        }
+    }
+
+    func renommerSection(id: UUID, nouveauNom: String) async {
+        if let index = sections.firstIndex(where: { $0.id == id }) {
+            sections[index].name = nouveauNom
+            if selectedSection?.id == id { selectedSection?.name = nouveauNom }
+        }
+        do {
+            try await client.from("site_notes_sections").update(["name": nouveauNom]).eq("id", value: id).execute()
+        } catch { print("❌ Erreur renommage section: \(error)") }
+    }
+
+    func supprimerSection(id: UUID) async {
+        // Ne pas supprimer HOME
+        guard let section = sections.first(where: { $0.id == id }), section.name != "HOME" else { return }
+
+        // Déplacer toutes les catégories de cette section vers HOME
+        let homeSection = sections.first { $0.name == "HOME" }
+        for category in categories.filter({ $0.section_id == id }) {
+            await deplacerCategorieVersSection(categoryId: category.id, newSectionId: homeSection?.id)
+        }
+
+        // Supprimer la section
+        if let index = sections.firstIndex(where: { $0.id == id }) {
+            sections.remove(at: index)
+        }
+
+        do {
+            try await client.from("site_notes_sections").delete().eq("id", value: id).execute()
+        } catch { print("❌ Erreur suppression section: \(error)") }
+
+        // Revenir à HOME
+        self.selectedSection = sections.first { $0.name == "HOME" }
+    }
+
+    func deplacerCategorieVersSection(categoryId: UUID, newSectionId: UUID?) async {
+        // Mise à jour locale
+        if let index = categories.firstIndex(where: { $0.id == categoryId }) {
+            withAnimation {
+                categories[index].section_id = newSectionId
+            }
+        }
+
+        // Mise à jour Supabase
+        do {
+            if let sectionId = newSectionId {
+                try await client.from("site_notes_categories")
+                    .update(["section_id": sectionId.uuidString])
+                    .eq("id", value: categoryId)
+                    .execute()
+            } else {
+                // Pour mettre null, on utilise une structure spéciale
+                try await client.from("site_notes_categories")
+                    .update(["section_id": NSNull()])
+                    .eq("id", value: categoryId)
+                    .execute()
+            }
+        } catch {
+            print("❌ Erreur déplacement catégorie: \(error)")
+        }
+    }
+
     // ==========================================
     // 1. GESTION DES CATÉGORIES
     // ==========================================
-    
+
     func chargerCategories() async {
         do {
             let cats: [NoteCategory] = try await client
@@ -31,8 +151,10 @@ extension NotesManager {
     func ajouterCategorie(nom: String) async {
         guard let userId = client.auth.currentUser?.id else { return }
         let maxIndex = categories.map { $0.order_index }.max() ?? 0
-        let newCat = NoteCategory(name: nom, user_id: userId, order_index: maxIndex + 1)
-        
+        // Associer la catégorie à la section actuellement sélectionnée
+        let sectionId = selectedSection?.id
+        let newCat = NoteCategory(name: nom, user_id: userId, order_index: maxIndex + 1, section_id: sectionId)
+
         do {
             try await client.from("site_notes_categories").insert(newCat).execute()
             await chargerCategories()
