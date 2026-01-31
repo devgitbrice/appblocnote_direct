@@ -147,7 +147,7 @@ class NotesManager: ObservableObject {
             let results: [NoteBlock] = try await client
                 .from("site_notes_blocks")
                 .select()
-                .ilike("content", value: "%\(tag)%")
+                .ilike("content", pattern: "%\(tag)%")
                 .order("created_at", ascending: false)
                 .execute()
                 .value

@@ -38,7 +38,7 @@ struct MainSplitView: View {
     @ViewBuilder
     private var sidebarContent: some View {
         List(selection: $notesManager.selectedCategory) {
-            Section(header: Text("Mes Dossiers")) {
+            SwiftUI.Section(header: Text("Mes Dossiers")) {
                 ForEach(notesManager.categoriesForSelectedSection, id: \.self) { category in
                     categoryRow(for: category)
                 }
