@@ -127,7 +127,7 @@ struct BlocNotesView: View {
         let client = SupabaseSingleton.shared.client
         
         // 1. Check Session
-        let session = try? await client.auth.session
+        let session = try? client.auth.session
         let user = client.auth.currentUser
         
         if session == nil {

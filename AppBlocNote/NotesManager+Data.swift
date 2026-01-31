@@ -100,7 +100,7 @@ extension NotesManager {
     func deplacerCategorieVersSection(categoryId: UUID, newSectionId: UUID?) async {
         // Mise à jour locale
         if let index = categories.firstIndex(where: { $0.id == categoryId }) {
-            withAnimation {
+            _ = withAnimation {
                 categories[index].section_id = newSectionId
             }
         }
@@ -130,7 +130,7 @@ extension NotesManager {
             if let globalIndex = categories.firstIndex(where: { $0.id == id }) {
                 categories[globalIndex].order_index = index
             }
-            try? await client.from("site_notes_categories")
+            _ = try? await client.from("site_notes_categories")
                 .update(OrderPayload(order_index: index))
                 .eq("id", value: id)
                 .execute()
@@ -193,7 +193,7 @@ extension NotesManager {
         self.categories = updatedCategories
         Task {
             for (index, category) in updatedCategories.enumerated() {
-                try? await client.from("site_notes_categories").update(["order_index": index]).eq("id", value: category.id).execute()
+                _ = try? await client.from("site_notes_categories").update(["order_index": index]).eq("id", value: category.id).execute()
             }
         }
     }
@@ -201,7 +201,7 @@ extension NotesManager {
     func toggleCategoryPin(category: NoteCategory) async {
         let newState = !category.is_pinned
         if let index = categories.firstIndex(where: { $0.id == category.id }) {
-            withAnimation {
+            _ = withAnimation {
                 categories[index].is_pinned = newState
                 categories.sort {
                     if $0.is_pinned != $1.is_pinned { return $0.is_pinned }
@@ -209,7 +209,7 @@ extension NotesManager {
                 }
             }
         }
-        try? await client.from("site_notes_categories").update(["is_pinned": newState]).eq("id", value: category.id).execute()
+        _ = try? await client.from("site_notes_categories").update(["is_pinned": newState]).eq("id", value: category.id).execute()
     }
     
     func toggleCategoryRed(category: NoteCategory) async {
@@ -217,7 +217,7 @@ extension NotesManager {
         if let index = categories.firstIndex(where: { $0.id == category.id }) {
             categories[index].is_red = newState
         }
-        try? await client.from("site_notes_categories").update(["is_red": newState]).eq("id", value: category.id).execute()
+        _ = try? await client.from("site_notes_categories").update(["is_red": newState]).eq("id", value: category.id).execute()
     }
 
     // ==========================================
@@ -276,7 +276,7 @@ extension NotesManager {
         let newNote = NoteBlock(id: newId, content: "", order_index: newIndex)
         
         // 1. AJOUT OPTIMISTE (UI)
-        withAnimation { blocks.insert(newNote, at: 0) }
+        _ = withAnimation { blocks.insert(newNote, at: 0) }
         
         Task {
             guard let userId = client.auth.currentUser?.id else {
@@ -305,7 +305,7 @@ extension NotesManager {
                 
                 await MainActor.run {
                     if let idx = blocks.firstIndex(where: { $0.id == newId }) {
-                        withAnimation { blocks.remove(at: idx) }
+                        _ = withAnimation { blocks.remove(at: idx) }
                     }
                 }
             }
@@ -315,15 +315,15 @@ extension NotesManager {
     func sauvegarderContenu(id: UUID, content: String) {
         Task {
             let payload = NoteUpdateContentPayload(content: content)
-            try? await client.from("site_notes_blocks").update(payload).eq("id", value: id).execute()
+            _ = try? await client.from("site_notes_blocks").update(payload).eq("id", value: id).execute()
         }
     }
     
     func supprimerNote(id: UUID) {
         if let index = blocks.firstIndex(where: { $0.id == id }) {
-            withAnimation { blocks.remove(at: index) }
+            _ = withAnimation { blocks.remove(at: index) }
         }
-        Task { try? await client.from("site_notes_blocks").delete().eq("id", value: id).execute() }
+        Task { _ = try? await client.from("site_notes_blocks").delete().eq("id", value: id).execute() }
     }
     
     func togglePin(id: UUID) {
@@ -331,15 +331,15 @@ extension NotesManager {
             let isGlobalPinnedView = selectedCategory?.name == "📌 Épinglés (Tous)"
             blocks[index].is_pinned.toggle()
             let newState = blocks[index].is_pinned
-            
+
             if isGlobalPinnedView && !newState {
-                withAnimation { blocks.remove(at: index) }
+                _ = withAnimation { blocks.remove(at: index) }
             } else {
-                withAnimation { blocks.sort { ($0.is_pinned && !$1.is_pinned) || ($0.is_pinned == $1.is_pinned && $0.order_index < $1.order_index) } }
+                _ = withAnimation { blocks.sort { ($0.is_pinned && !$1.is_pinned) || ($0.is_pinned == $1.is_pinned && $0.order_index < $1.order_index) } }
             }
             Task {
                 let payload = NoteUpdatePinPayload(is_pinned: newState)
-                try? await client.from("site_notes_blocks").update(payload).eq("id", value: id).execute()
+                _ = try? await client.from("site_notes_blocks").update(payload).eq("id", value: id).execute()
             }
         }
     }
@@ -350,7 +350,7 @@ extension NotesManager {
             let newState = blocks[index].is_favorite
             Task {
                 let payload = NoteUpdateFavoritePayload(is_favorite: newState)
-                try? await client.from("site_notes_blocks").update(payload).eq("id", value: id).execute()
+                _ = try? await client.from("site_notes_blocks").update(payload).eq("id", value: id).execute()
             }
         }
     }
