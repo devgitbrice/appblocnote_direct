@@ -2,149 +2,170 @@ import SwiftUI
 
 struct MainSplitView: View {
     @StateObject var notesManager = NotesManager()
-    
+
     @State private var showingAddCategory = false
     @State private var newCategoryName = ""
-    
+
     @State private var editingCategoryId: UUID? = nil
     @State private var editingName: String = ""
     @FocusState private var isInputFocused: Bool
-    
+
     var body: some View {
-        NavigationSplitView {
-            List(selection: $notesManager.selectedCategory) {
-                
-                // ==================================================
-                // 📌 SECTION SPÉCIALE : TOUS LES ÉPINGLÉS (Si présente)
-                // ==================================================
-                // (Je garde la structure de ta liste actuelle)
-                
-                Section(header: Text("Mes Dossiers")) {
-                    ForEach(notesManager.categories, id: \.self) { category in
-                        if editingCategoryId == category.id {
-                            // MODE ÉDITION
-                            HStack {
-                                Image(systemName: "folder").foregroundColor(.blue)
-                                TextField("Nom du dossier", text: $editingName)
-                                    .textFieldStyle(.plain)
-                                    .focused($isInputFocused)
-                                    .onSubmit { validerRenommage(category: category) }
-                                Button(action: { validerRenommage(category: category) }) {
-                                    Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                                }.buttonStyle(.plain)
-                            }
-                            .onAppear { isInputFocused = true }
-                        } else {
-                            // MODE LECTURE
-                            NavigationLink(value: category) {
+        VStack(spacing: 0) {
+            // === BARRE DE SECTIONS EN HAUT ===
+            SectionBar(notesManager: notesManager)
+
+            // === CONTENU PRINCIPAL ===
+            NavigationSplitView {
+                List(selection: $notesManager.selectedCategory) {
+                    Section(header: Text("Mes Dossiers")) {
+                        ForEach(notesManager.categoriesForSelectedSection, id: \.self) { category in
+                            if editingCategoryId == category.id {
+                                // MODE ÉDITION
                                 HStack {
-                                    Image(systemName: category.is_pinned ? "pin.fill" : "folder")
-                                        .foregroundColor(category.is_pinned ? .indigo : .blue)
-                                    Text(category.name)
-                                        .foregroundColor(category.is_red ? .red : .primary)
-                                        .fontWeight(category.is_red ? .bold : .regular)
+                                    Image(systemName: "folder").foregroundColor(.blue)
+                                    TextField("Nom du dossier", text: $editingName)
+                                        .textFieldStyle(.plain)
+                                        .focused($isInputFocused)
+                                        .onSubmit { validerRenommage(category: category) }
+                                    Button(action: { validerRenommage(category: category) }) {
+                                        Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                                    }.buttonStyle(.plain)
+                                }
+                                .onAppear { isInputFocused = true }
+                            } else {
+                                // MODE LECTURE
+                                NavigationLink(value: category) {
+                                    HStack {
+                                        Image(systemName: category.is_pinned ? "pin.fill" : "folder")
+                                            .foregroundColor(category.is_pinned ? .indigo : .blue)
+                                        Text(category.name)
+                                            .foregroundColor(category.is_red ? .red : .primary)
+                                            .fontWeight(category.is_red ? .bold : .regular)
+                                    }
+                                }
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    Button { Task { await notesManager.toggleCategoryPin(category: category) } } label: { Label("Épingler", systemImage: category.is_pinned ? "pin.slash" : "pin") }.tint(.indigo)
+                                    Button { Task { await notesManager.toggleCategoryRed(category: category) } } label: { Label("Rouge", systemImage: "paintbrush.fill") }.tint(.red)
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button { lancerEdition(category: category) } label: { Label("Renommer", systemImage: "pencil") }.tint(.orange)
+                                }
+                                .onTapGesture(count: 2) { lancerEdition(category: category) }
+                                .contextMenu {
+                                    Button("Renommer") { lancerEdition(category: category) }
+                                    Button(category.is_pinned ? "Désépingler" : "Épingler") { Task { await notesManager.toggleCategoryPin(category: category) } }
+                                    Button(category.is_red ? "Enlever rouge" : "Mettre en rouge") { Task { await notesManager.toggleCategoryRed(category: category) } }
+
+                                    Divider()
+
+                                    // Menu pour déplacer vers une autre section
+                                    Menu("Déplacer vers...") {
+                                        ForEach(notesManager.sections.filter { $0.id != category.section_id }, id: \.self) { section in
+                                            Button {
+                                                Task {
+                                                    await notesManager.deplacerCategorieVersSection(
+                                                        categoryId: category.id,
+                                                        newSectionId: section.id
+                                                    )
+                                                }
+                                            } label: {
+                                                Label(section.name, systemImage: section.icon)
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                Button { Task { await notesManager.toggleCategoryPin(category: category) } } label: { Label("Épingler", systemImage: category.is_pinned ? "pin.slash" : "pin") }.tint(.indigo)
-                                Button { Task { await notesManager.toggleCategoryRed(category: category) } } label: { Label("Rouge", systemImage: "paintbrush.fill") }.tint(.red)
-                            }
-                            .swipeActions(edge: .trailing) {
-                                Button { lancerEdition(category: category) } label: { Label("Renommer", systemImage: "pencil") }.tint(.orange)
-                            }
-                            .onTapGesture(count: 2) { lancerEdition(category: category) }
-                            .contextMenu {
-                                Button("Renommer") { lancerEdition(category: category) }
-                                Button(category.is_pinned ? "Désépingler" : "Épingler") { Task { await notesManager.toggleCategoryPin(category: category) } }
-                                Button(category.is_red ? "Enlever rouge" : "Mettre en rouge") { Task { await notesManager.toggleCategoryRed(category: category) } }
-                            }
+                        }
+                        .onMove(perform: deplacerCategorieDansSection)
+                    }
+                }
+                .navigationTitle("Catégories")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(action: { showingAddCategory = true }) {
+                            Label("Ajouter", systemImage: "folder.badge.plus")
                         }
                     }
-                    .onMove(perform: notesManager.deplacerCategorie)
                 }
-            }
-            .navigationTitle("Catégories")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingAddCategory = true }) {
-                        Label("Ajouter", systemImage: "folder.badge.plus")
-                    }
-                }
-            }
-            .sheet(isPresented: $showingAddCategory) {
-                VStack(spacing: 20) {
-                    Text("Nouveau dossier").font(.headline)
-                    TextField("Nom du dossier", text: $newCategoryName).textFieldStyle(.roundedBorder).padding()
-                    HStack {
-                        Button("Annuler") { showingAddCategory = false }
-                        Button("Créer") {
-                            Task {
-                                await notesManager.ajouterCategorie(nom: newCategoryName)
-                                newCategoryName = ""
-                                showingAddCategory = false
-                            }
-                        }
-                        .disabled(newCategoryName.isEmpty)
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-                .padding().presentationDetents([.fraction(0.3)])
-            }
-            // --- BOUTONS BAS DE PAGE (SUPABASE + GEMINI) ---
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 0) {
-                    Divider()
-                    
-                    // 1. BOUTON SUPABASE
-                    Link(destination: URL(string: "https://supabase.com/dashboard/project/lomgelwpxlzynuogxsri/editor/40424")!) {
+                .sheet(isPresented: $showingAddCategory) {
+                    VStack(spacing: 20) {
+                        Text("Nouveau dossier").font(.headline)
+                        TextField("Nom du dossier", text: $newCategoryName).textFieldStyle(.roundedBorder).padding()
                         HStack {
-                            Image(systemName: "database.fill")
-                            Text("SUPABASE")
-                                .fontWeight(.bold)
+                            Button("Annuler") { showingAddCategory = false }
+                            Button("Créer") {
+                                Task {
+                                    await notesManager.ajouterCategorie(nom: newCategoryName)
+                                    newCategoryName = ""
+                                    showingAddCategory = false
+                                }
+                            }
+                            .disabled(newCategoryName.isEmpty)
+                            .buttonStyle(.borderedProminent)
                         }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .foregroundColor(.green)
-                        .background(Color(UIColor.secondarySystemBackground))
                     }
-                    
-                    Divider()
-                    
-                    // 2. BOUTON GEMINI
-                    Link(destination: URL(string: "https://gemini.google.com/app/52bf4dc58f08a43d")!) {
-                        HStack {
-                            Image(systemName: "sparkles")
-                            Text("HELP GEMINI")
-                                .fontWeight(.bold)
+                    .padding().presentationDetents([.fraction(0.3)])
+                }
+                // --- BOUTONS BAS DE PAGE (SUPABASE + GEMINI) ---
+                .safeAreaInset(edge: .bottom) {
+                    VStack(spacing: 0) {
+                        Divider()
+
+                        // 1. BOUTON SUPABASE
+                        Link(destination: URL(string: "https://supabase.com/dashboard/project/lomgelwpxlzynuogxsri/editor/40424")!) {
+                            HStack {
+                                Image(systemName: "database.fill")
+                                Text("SUPABASE")
+                                    .fontWeight(.bold)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .foregroundColor(.green)
+                            .background(Color(UIColor.secondarySystemBackground))
                         }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .foregroundColor(.indigo)
-                        .background(Color(UIColor.secondarySystemBackground))
+
+                        Divider()
+
+                        // 2. BOUTON GEMINI
+                        Link(destination: URL(string: "https://gemini.google.com/app/52bf4dc58f08a43d")!) {
+                            HStack {
+                                Image(systemName: "sparkles")
+                                Text("HELP GEMINI")
+                                    .fontWeight(.bold)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .foregroundColor(.indigo)
+                            .background(Color(UIColor.secondarySystemBackground))
+                        }
                     }
+                }
+            } detail: {
+                if !notesManager.categoriesForSelectedSection.isEmpty {
+                    TabView(selection: $notesManager.selectedCategory) {
+                        ForEach(notesManager.categoriesForSelectedSection, id: \.self) { category in
+                            BlocNotesView(notesManager: notesManager)
+                                .tag(Optional(category))
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    #if os(iOS)
+                    .indexViewStyle(.page(backgroundDisplayMode: .interactive))
+                    #endif
+                    .id(notesManager.categoriesForSelectedSection.count)
+                } else {
+                    Text("Aucun dossier dans cette section. Créez-en un !").foregroundStyle(.secondary)
                 }
             }
-            
-        } detail: {
-            if !notesManager.categories.isEmpty {
-                TabView(selection: $notesManager.selectedCategory) {
-                    ForEach(notesManager.categories, id: \.self) { category in
-                        BlocNotesView(notesManager: notesManager)
-                            .tag(Optional(category))
-                    }
+            .onAppear {
+                Task {
+                    await notesManager.chargerSections()
+                    await notesManager.chargerCategories()
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                #if os(iOS)
-                .indexViewStyle(.page(backgroundDisplayMode: .interactive))
-                #endif
-                .id(notesManager.categories.count)
-            } else {
-                Text("Aucun dossier. Créez-en un !").foregroundStyle(.secondary)
             }
         }
-        .onAppear { Task { await notesManager.chargerCategories() } }
-        
-        // --- NOUVEAU : GESTION DE L'OUVERTURE DES TAGS ---
+        // --- GESTION DE L'OUVERTURE DES TAGS ---
         .sheet(item: Binding(
             get: { notesManager.selectedTagToOpen.map { TagWrapper(name: $0) } },
             set: { notesManager.selectedTagToOpen = $0?.name }
@@ -152,12 +173,12 @@ struct MainSplitView: View {
             TagResultsView(tagName: wrapper.name, manager: notesManager)
         }
     }
-    
+
     func lancerEdition(category: NoteCategory) {
         editingName = category.name
         editingCategoryId = category.id
     }
-    
+
     func validerRenommage(category: NoteCategory) {
         guard !editingName.isEmpty else { return }
         let oldName = category.name
@@ -166,6 +187,23 @@ struct MainSplitView: View {
         editingCategoryId = nil
         if oldName != newName {
             Task { await notesManager.renommerCategorie(id: catId, nouveauNom: newName) }
+        }
+    }
+
+    func deplacerCategorieDansSection(from source: IndexSet, to destination: Int) {
+        var filteredCategories = notesManager.categoriesForSelectedSection
+        filteredCategories.move(fromOffsets: source, toOffset: destination)
+
+        Task {
+            for (index, category) in filteredCategories.enumerated() {
+                if let globalIndex = notesManager.categories.firstIndex(where: { $0.id == category.id }) {
+                    notesManager.categories[globalIndex].order_index = index
+                }
+                try? await notesManager.client.from("site_notes_categories")
+                    .update(["order_index": index])
+                    .eq("id", value: category.id)
+                    .execute()
+            }
         }
     }
 }

@@ -29,11 +29,27 @@ struct NoteUpdatePinPayload: Encodable {
 // --- CLASSE PRINCIPALE ---
 @MainActor
 class NotesManager: ObservableObject {
-    
+
     // --- DONNÉES ---
+    @Published var sections: [Section] = []
     @Published var categories: [NoteCategory] = []
     @Published var blocks: [NoteBlock] = []
-    
+
+    @Published var selectedSection: Section? {
+        didSet {
+            // Quand on change de section, on recharge les catégories filtrées
+            if let section = selectedSection {
+                // Sélectionner la première catégorie de cette section
+                if let firstCat = categoriesForSelectedSection.first {
+                    selectedCategory = firstCat
+                } else {
+                    selectedCategory = nil
+                    blocks = []
+                }
+            }
+        }
+    }
+
     @Published var selectedCategory: NoteCategory? {
         didSet {
             if let cat = selectedCategory {
@@ -42,6 +58,15 @@ class NotesManager: ObservableObject {
                 blocks = []
             }
         }
+    }
+
+    // Catégories filtrées par section sélectionnée
+    var categoriesForSelectedSection: [NoteCategory] {
+        guard let section = selectedSection else {
+            // Si pas de section sélectionnée, montrer les catégories sans section (HOME par défaut)
+            return categories.filter { $0.section_id == nil }
+        }
+        return categories.filter { $0.section_id == section.id || ($0.section_id == nil && section.name == "HOME") }
     }
     
     // --- SERVICES ---
