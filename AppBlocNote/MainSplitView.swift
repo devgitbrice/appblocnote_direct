@@ -194,16 +194,9 @@ struct MainSplitView: View {
         var filteredCategories = notesManager.categoriesForSelectedSection
         filteredCategories.move(fromOffsets: source, toOffset: destination)
 
+        let orderedIds = filteredCategories.map { $0.id }
         Task {
-            for (index, category) in filteredCategories.enumerated() {
-                if let globalIndex = notesManager.categories.firstIndex(where: { $0.id == category.id }) {
-                    notesManager.categories[globalIndex].order_index = index
-                }
-                try? await notesManager.client.from("site_notes_categories")
-                    .update(["order_index": index])
-                    .eq("id", value: category.id)
-                    .execute()
-            }
+            await notesManager.reordonnerCategories(ids: orderedIds)
         }
     }
 }

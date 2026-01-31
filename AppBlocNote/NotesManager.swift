@@ -38,7 +38,7 @@ class NotesManager: ObservableObject {
     @Published var selectedSection: Section? {
         didSet {
             // Quand on change de section, on recharge les catégories filtrées
-            if let section = selectedSection {
+            if selectedSection != nil {
                 // Sélectionner la première catégorie de cette section
                 if let firstCat = categoriesForSelectedSection.first {
                     selectedCategory = firstCat

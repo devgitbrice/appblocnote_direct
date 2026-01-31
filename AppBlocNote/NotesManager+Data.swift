@@ -120,6 +120,23 @@ extension NotesManager {
         }
     }
 
+    func reordonnerCategories(ids: [UUID]) async {
+        // Met à jour l'ordre des catégories localement et sur Supabase
+        struct OrderPayload: Encodable {
+            let order_index: Int
+        }
+
+        for (index, id) in ids.enumerated() {
+            if let globalIndex = categories.firstIndex(where: { $0.id == id }) {
+                categories[globalIndex].order_index = index
+            }
+            try? await client.from("site_notes_categories")
+                .update(OrderPayload(order_index: index))
+                .eq("id", value: id)
+                .execute()
+        }
+    }
+
     // ==========================================
     // 1. GESTION DES CATÉGORIES
     // ==========================================
